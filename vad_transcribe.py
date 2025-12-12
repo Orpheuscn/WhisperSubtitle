@@ -2,7 +2,7 @@
 """
 连续语音识别脚本 - 针对对白稀疏的音频（改进版）
 检测连续语音片段，分别识别后合并字幕
-使用 pyannote VAD + OpenAI Whisper 进行语音识别
+使用 pyannote segmentation-3.0 VAD + OpenAI Whisper 进行语音识别
 
 注意：需要在虚拟环境中运行以使用 pyannote，同时系统需要安装 openai-whisper
 """
@@ -17,7 +17,8 @@ from typing import List, Tuple, Dict
 
 # 导入虚拟环境的 torch 和 pyannote
 import torch
-from pyannote.audio import Pipeline
+from pyannote.audio import Model
+from pyannote.audio.pipelines import VoiceActivityDetection
 
 
 def extract_audio(input_file: str, output_audio: str) -> None:
@@ -36,7 +37,7 @@ def detect_continuous_speech_segments(audio_file: str,
                                       speech_pad_ms: int = 300,
                                       enable_second_pass: bool = True) -> List[Tuple[float, float]]:
     """
-    使用 pyannote VAD 检测连续语音片段
+    使用 pyannote segmentation-3.0 VAD 检测连续语音片段
 
     参数:
         silence_threshold_sec: 静音阈值（秒），超过此时长视为片段分隔
@@ -48,18 +49,32 @@ def detect_continuous_speech_segments(audio_file: str,
     """
     print(f"正在检测连续语音片段（静音阈值: {silence_threshold_sec}秒）...")
 
-    # 加载 pyannote speaker diarization 模型（包含 VAD 功能）
-    print("正在加载 pyannote 模型...")
+    # 加载 pyannote segmentation-3.0 VAD 模型
+    print("正在加载 pyannote segmentation-3.0 VAD 模型...")
     try:
-        # 使用 speaker-diarization 模型（包含 VAD 功能，token 通过环境变量 HF_TOKEN 自动读取）
-        vad_pipeline = Pipeline.from_pretrained(
-            "pyannote/speaker-diarization-3.1"
+        # 加载 segmentation 模型（token 通过环境变量 HF_TOKEN 自动读取）
+        model = Model.from_pretrained(
+            "pyannote/segmentation-3.0",
+            use_auth_token=os.environ.get("HF_TOKEN")
         )
+
+        # 创建 VAD pipeline
+        vad_pipeline = VoiceActivityDetection(segmentation=model)
+
+        # 设置超参数
+        HYPER_PARAMETERS = {
+            # 移除短于此秒数的语音片段
+            "min_duration_on": 0.0,
+            # 填充短于此秒数的非语音片段
+            "min_duration_off": 0.0
+        }
+        vad_pipeline.instantiate(HYPER_PARAMETERS)
+
         print("模型加载完成\n")
     except Exception as e:
         print(f"加载模型失败: {e}")
         print("提示: 如果需要 HuggingFace token，请设置环境变量 HF_TOKEN")
-        print("请访问 https://huggingface.co/pyannote/speaker-diarization-3.1 接受用户条件")
+        print("请访问 https://huggingface.co/pyannote/segmentation-3.0 接受用户条件")
         raise
 
     # 读取音频文件（使用 soundfile 以兼容 pyannote）
@@ -80,7 +95,7 @@ def detect_continuous_speech_segments(audio_file: str,
 
     # 使用 pyannote 进行语音检测
     print("=" * 60)
-    print("使用 pyannote 检测语音片段")
+    print("使用 pyannote segmentation-3.0 检测语音片段")
     print("=" * 60)
 
     # 准备音频数据（pyannote 需要的格式）
@@ -89,13 +104,12 @@ def detect_continuous_speech_segments(audio_file: str,
         "sample_rate": sample_rate
     }
 
-    # 运行 diarization（我们只使用其中的语音活动检测部分）
+    # 运行 VAD
     vad_result = vad_pipeline(audio_data)
 
-    # 提取语音片段（从 diarization 结果中提取所有说话片段）
+    # 提取语音片段
     speech_segments = []
-    # 使用 speaker_diarization 属性获取时间轴
-    for segment, _, speaker in vad_result.speaker_diarization.itertracks(yield_label=True):
+    for segment, _, label in vad_result.itertracks(yield_label=True):
         start_ms = segment.start * 1000  # 转换为毫秒
         end_ms = segment.end * 1000
 
