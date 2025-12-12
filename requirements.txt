@@ -1,0 +1,10 @@
+# 核心依赖
+torch>=2.0.0
+pyannote.audio>=4.0.0
+soundfile>=0.12.0
+numpy>=1.24.0
+
+# 注意：
+# - openai-whisper 需要在系统级别安装（使用 brew 或 pip3 全局安装）
+# - FFmpeg 需要单独安装
+# - 需要配置 HF_TOKEN 环境变量以使用 pyannote 模型
