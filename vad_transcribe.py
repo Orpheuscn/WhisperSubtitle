@@ -396,7 +396,9 @@ def main():
         return
 
     # 在当前目录创建temp_continuous文件夹
-    temp_dir = os.path.join(os.getcwd(), 'temp_continuous')
+    input_path = Path(args.input_file)
+    # input_path.parent 获取输入文件的父目录
+    temp_dir = os.path.join(input_path.parent, 'temp_continuous')
     os.makedirs(temp_dir, exist_ok=True)
     print(f"临时目录: {temp_dir}")
     print("注意：处理完成后temp_continuous文件夹不会自动删除，请手动清理\n")
@@ -494,8 +496,9 @@ def main():
     print("="*50 + "\n")
     
     # 步骤5: 生成SRT文件
-    output_srt = Path(args.input_file).stem + '.srt'
-    generate_srt(all_segments, output_srt)
+    output_srt = Path(args.input_file).with_suffix('.srt')
+    print(f"\n正在生成SRT字幕文件到: {output_srt}")
+    generate_srt(all_segments, str(output_srt))
     
     # 输出统计信息
     total_speech_duration = sum(
